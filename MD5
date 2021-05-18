@@ -1,0 +1,14 @@
+85123eb608182d9bd7e7a83888bd409b *DESCRIPTION
+3461d74f8d8c03f78127b9fa7e7bc9d5 *NAMESPACE
+91100da4abb3b397f83bc55d9fd03756 *R/platemodel.R
+98a424ea6219010512ad4ee1540cf7a2 *R/reconstruction.R
+5292ecd0e99b36a2834042ee9c13d728 *R/utility.R
+eac8cd2dd67072ee14e4df9a0b75447e *R/zzz.R
+e0a05ddc486a2ceb368b6d7594255354 *inst/CITATION
+827daca55fa3aaa8067b7c5522ea26df *inst/NEWS.md
+b2bb53520b1b180771f20e70f13ce575 *inst/extdata/chronos.csv
+e00e7e4cd0645ca95818fc6ee5f7ee76 *inst/extdata/paleomap.csv
+41544d8c6ea25a9124e3fbf30c411f4d *inst/extdata/paleomap_model_v19o_r1c.zip
+3c3c8368118d7a39dd3415acbd809e39 *man/platemodel.Rd
+fae89f237381560bc42d071855541705 *man/reconstruct.Rd
+e47aefc25f7b878789550a3fe7085ec0 *man/rgplates.Rd
