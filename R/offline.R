@@ -8,8 +8,35 @@
 #	reconstruct(x, age=10, model=mo, verbose=TRUE)
 #reconstruct(x, age=10, model=mo, verbose=TRUE, path.gplates="/Users/Nick/Downloads/GPlates-2.2.0/gplates.app/Contents/MacOS/gplates")
 
-reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbose=FALSE, cleanup=TRUE, plateperiod=FALSE, gmeta=FALSE, partitioning="static_polygons"){
+reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbose=FALSE, cleanup=TRUE, plateperiod=FALSE, gmeta=FALSE, partitioning="static_polygons", check=TRUE){
+	# shortcut - will be put in a matrix automatically
+	if(is.na(age)) return(NA)
 	if(!inherits(model, "platemodel")) stop("You need a GPlates tectonic object for this method.")
+	# 0. Process the attributes
+	if(inherits(model@features, "data.frame")){
+		if(check){
+			# check for the ages!
+			if(is.character(x)){
+				checkThis <- x
+			#fall through, use the partitioning!
+			}else{
+				checkThis <- partitioning
+			}
+			# the part corresponding to this
+			if(!any(checkThis==rownames(model@features))) stop(paste0("The feature collection '",checkThis,"' is not found."))
+			thisPart <-model@features[ checkThis, ] 
+
+			# get the ages
+			young <- thisPart[ , "to"]
+			old <- thisPart[ , "from"]
+			if(!(age>=young && age <=old) ) stop(paste0("Invalid age. '", checkThis, "' is valid between ", old, " Ma and ", young, " Ma."))
+		}
+
+		# omit the age info, use characters as features
+		nam <- rownames(model@features)
+		model@features <- model@features[, "feature_collection"]
+		names(model@features) <- nam
+	}	
 	
     # 1. FIND GPlates
 		# A. get operating system
@@ -233,6 +260,9 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 		# is this a single file? 
 		allFiles <- list.files(tempd)
 
+		# assume that nothing was calculated. The formatting will be taken care of by the front-end functions
+		rotated <- NA
+	
 		# is the target single file created?
 		if(any(allFiles==targetSingleNoPath)){
 			if(verbose) message("Found single output geometry files.")
@@ -319,22 +349,25 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 
 			# and they are either a matrix or a data frame transform object back to whatever it was
 			if((inherits(originals, "matrix") | inherits(originals, "data.frame")) ){
-				# some coordinates probably were missing
-				# get the coorindates
-				#  reconstructed
-				rotatedSF <- rotated
-				coords <- sf::st_coordinates(rotated)
+				# run this, except when missing value is indicated
+				if(!all(is.na(rotated))){
+					# some coordinates probably were missing
+					# get the coorindates
+					#  reconstructed
+					rotatedSF <- rotated
+					coords <- sf::st_coordinates(rotated)
 
-				# where to put the new coordinates
-				rotated <- originals
-				rotated[] <- NA
+					# where to put the new coordinates
+					rotated <- originals
+					rotated[] <- NA
 
-				# use the IDs to make sure that things really match!
-				rownames(rotated) <- theID
-				rotated[rotatedSF$ID, ] <- coords
+					# use the IDs to make sure that things really match!
+					rownames(rotated) <- theID
+					rotated[rotatedSF$ID, ] <- coords
 
-				# copy over the rownames
-				rownames(rotated) <- rownames(originals)
+					# copy over the rownames
+					rownames(rotated) <- rownames(originals)
+				}
 
 			}else{
 				if(!is.null(originals)) stop(paste("Unknown output class", class(originals)))

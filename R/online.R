@@ -3,6 +3,8 @@
 
 # correcting the point recontstruction problem, wrapper around the point reconstruction funciton
 IteratedPointReconstruction <- function(coords,age, chunk=200, model="MERDITH2021", reverse=FALSE, verbose=TRUE){
+	# shortcut - will be put in matrix automatically
+	if(is.na(age)) return(NA)
 	if(any(age%%1!=0)){
 		message("Only integer ages are supported by the online method.\nRounding target age(s).")	
 		age <- round(age)
@@ -138,8 +140,13 @@ gplates_reconstruct_this <- function(age, this, model="MERDITH2021", verbose=TRU
 	}
 	if(! requireNamespace("geojsonsf", quietly=TRUE)) stop("This method requires the 'geojsonsf' package to run.")
 	
+	if (this=="plate_polygons"){
+		this <- "topology/plate_polygons"
+	}else{
+		this <- paste0("reconstruct/", this)
+	}
 	#download and save data
-	url <- paste0('http://gws.gplates.org/reconstruct/', this, '/')
+	url <- paste0('http://gws.gplates.org/', this, '/')
 	query <- sprintf('?time=%d&model=%s', age, model)
 	
 	fullrequest <- sprintf(paste0(url,query))
@@ -188,3 +195,26 @@ gplates_reconstruct_this <- function(age, this, model="MERDITH2021", verbose=TRU
 	
 ## 	return(rpoly)
 ## }
+
+CheckGWS <- function(x, model, age, verbose=TRUE){
+	# load the relevant data
+	if(verbose){
+		message("Checking validity of entries for GWS.")
+	}
+	gws <- NULL
+	# use lazy loading to get it into the memory
+	data(gws, envir=environment())
+
+	# limit to model
+	gwsMod <- gws[which(gws$model==model), ]
+
+	if(nrow(gwsMod)==0) stop("The selected model is not a registered output of theof the GPlates Web Service.")
+
+	# limit to feature
+	feat <- gwsMod[which(gwsMod$feature==x), ]
+	if(nrow(feat)==0) stop(paste0("'", x, "' is not returned for model '", model, "'."))
+
+	# check whether it is the right range
+	if(!(age <= feat$from & age >= feat$to)) stop(paste0("The model '", model, "' has a valid age range of ", feat$from, " Ma to ", feat$to, " Ma. "))
+
+}
