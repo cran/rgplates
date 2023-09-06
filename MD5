@@ -1,13 +1,13 @@
-68c43c8355f48e9092d75942729d2cc8 *DESCRIPTION
+708ebdf380ce25bef9a7a086d544dfad *DESCRIPTION
 b33175d6582af5ac354754652d8d55ce *NAMESPACE
-cab700f8f26743e3aa8d6b9d574dcd32 *NEWS.md
+4a4ea5e79dc731e4dc895fe1f8527532 *NEWS.md
 693178af24e6ba59066c11107bd82e56 *R/data.R
-d2f7cb7ff36858baa3127964645be6fd *R/front_end.R
-9b1112aa4297983e5a8774d338eae564 *R/offline.R
+eae65b056c6df24accb82a27f18863c1 *R/front_end.R
+5a334ed042372200b94dc5d84e8e3aa5 *R/offline.R
 fb55d86569bab756b863d1dfcee52128 *R/online.R
 ab04f10923e32db8032586d7863a5280 *R/platemodel.R
-7232bc35b85bb9a68665b22178ff608f *R/utility.R
-7b0a9553d41cba818455afe0e7d13aaf *R/zzz.R
+dd3091ac0c5a872aee178d0c05d88427 *R/utility.R
+7ccf6631ab399525538d05590b42f336 *R/zzz.R
 3698ae1b701fbbe279ffbb942ba8a49d *data/gws.RData
 3e0ae1995ba93f783c200508adbb4113 *inst/CITATION
 00c747e6e3e4aa5d09dd2a12db240afc *inst/extdata/paleomap_v3.zip
@@ -15,5 +15,5 @@ bc4ec430c40f340c0ed37a5eda115d6f *man/figures/logo.png
 612cd2b844802fe3b25b0bfabab2feab *man/gws.Rd
 fa73086d2673d517d8326257b038d387 *man/mapedge.Rd
 2a9c174e535831fc3901159bbe976efb *man/platemodel.Rd
-9781975726835b1bc229e2a4f7af5166 *man/reconstruct.Rd
-f0abc40357b614eaf066ab12f2ebffb4 *man/rgplates.Rd
+1391ef0bce9b2174b89881e01e2c23de *man/reconstruct.Rd
+1b09d1485f11518217cc470ef93b98a9 *man/rgplates.Rd
