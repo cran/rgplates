@@ -14,19 +14,23 @@ reconstruct(x, ...)
 
 \S4method{reconstruct}{matrix}(
   x,
-  age,
+  age = 0,
   model = "MERDITH2021",
+  from = 0,
   listout = TRUE,
   verbose = FALSE,
   enumerate = TRUE,
-  chunk = 200,
+  chunk = NULL,
   reverse = FALSE,
   path.gplates = NULL,
   cleanup = TRUE,
   dir = NULL,
-  plateperiod = TRUE,
+  plateperiod = NULL,
   partitioning = "static_polygons",
-  check = TRUE
+  check = TRUE,
+  warn = TRUE,
+  anchor = 0,
+  validtime = TRUE
 )
 
 \S4method{reconstruct}{data.frame}(x, ...)
@@ -42,9 +46,9 @@ reconstruct(x, ...)
   path.gplates = NULL,
   cleanup = TRUE,
   dir = NULL,
-  plateperiod = FALSE,
   partitioning = "static_polygons",
-  check = TRUE
+  check = TRUE,
+  anchor = 0
 )
 
 \S4method{reconstruct}{Spatial}(
@@ -56,9 +60,10 @@ reconstruct(x, ...)
   path.gplates = NULL,
   cleanup = TRUE,
   dir = NULL,
-  plateperiod = FALSE,
+  plateperiod = NULL,
   partitioning = "static_polygons",
-  check = TRUE
+  check = TRUE,
+  validtime = TRUE
 )
 
 \S4method{reconstruct}{sf}(
@@ -70,22 +75,25 @@ reconstruct(x, ...)
   path.gplates = NULL,
   cleanup = TRUE,
   dir = NULL,
-  plateperiod = FALSE,
+  plateperiod = NULL,
   gmeta = FALSE,
   partitioning = "static_polygons",
-  check = TRUE
+  check = TRUE,
+  validtime = TRUE
 )
 }
 \arguments{
-\item{x}{are the features to be reconstructed. Can be a vector with longitude and latitude representing
-a single point or a matrix/dataframe with the first column as longitude and second column as latitude, or a \code{SpatialPolygonsDataFrame} class object. 
-For the online subroutine, the character strings \code{"static_polygons"}, \code{"coastlines"}  and \code{"plate_polygons"} return static plate polygons, rotated present-day coastlines and topological plates, respectively. For the offline subroutine, it can be a name of the feature set defined in the \code{model} object.}
+\item{x}{The features to be reconstructed. Can be a vector with longitude and latitude representing
+a single point or a matrix/dataframe with the first column as longitude and second column as latitude.
+For the online subroutine, the character strings \code{"static_polygons"}, \code{"coastlines"}  and \code{"plate_polygons"} return static plate polygons, rotated present-day coastlines and topological plates, respectively. For the offline subroutine, it can be a name of the feature set defined in the \code{model} object. Some \code{Spatial*} and \code{sf} classes are also accepted, although this input is still experimental.}
 
 \item{...}{arguments passed to class-specific methods.}
 
-\item{age}{(\code{numeric}) is the age in Ma at which the points will be reconstructed}
+\item{age}{(\code{numeric}) is the target age in Ma at which the feature will be reconstructed. Defaults to 0 Ma.}
 
 \item{model}{(\code{character} or \code{\link{platemodel}}) The  reconstruction model. The class of this argument selects the submodule used for reconstruction, a \code{character} value will invoke the remote reconstruction submodule and will submit \code{x} to the GPlates Web Service. A \code{platemodel} class object will call the local-reconstruction submodule. The default is \code{"PALEOMAP"}. See details for available models.}
+
+\item{from}{(\code{numeric}) The original age of the features to be reconstructed. A single value, defaults to 0Ma. Only used with the online reconstruction module.}
 
 \item{listout}{(\code{logical})If multiple ages are given, the output can be returned as a \code{list} if \code{listout = TRUE}.}
 
@@ -93,10 +101,10 @@ For the online subroutine, the character strings \code{"static_polygons"}, \code
 
 \item{enumerate}{(\code{logical}) Should be all coordinate/age combinations be enumerated and reconstructed (set to \code{TRUE} by default)? \code{FALSE} is applicable only if the number of rows in \code{x} is equal to the number elementes in \code{age}. Then a point will be reconstructed to the age that has the same index in \code{age} as the row of the coordinates in \code{x}. List output is not available in this case.}
 
-\item{chunk}{(\code{numeric}) Argument of the remote reconstruction submodule. Single integer, the number of coordinates that will be queried from the GPlates in a single go.}
+\item{chunk}{(\code{numeric}) Deprected argument of the online reconstruction method. Ignored.}
 
 \item{reverse}{(\code{logical}) Argument of the remote reconstruction submodule. The flag to control the direction of reconstruction. If \code{reverse = TRUE}, the function will 
-calculate the present-day coordinates of the given paleo-coordinates.}
+calculate the present-day coordinates of the given paleo-coordinates, with age setting the target. Not recommended, kept only for compatibility with the GPlates Web Service. Using \code{from} instead of \code{age} will automatically trigger reverse reconstruction.}
 
 \item{path.gplates}{(\code{character}) Argument of the local reconstruction submodule. In case the GPlates executable file is not found at the coded default location, the full path to the executable (gplates-<ver>.exe on Windows) can be entered here. e.g. \code{"C:/gplates_2.3.0_win64/gplates.exe"}.}
 
@@ -104,11 +112,17 @@ calculate the present-day coordinates of the given paleo-coordinates.}
 
 \item{dir}{(\code{character}) Argument of the local reconstruction submodule. Directory where the temporary files of the reconstruction are stored (defaults to a temporary directory created by R). Remember to toggle \code{cleanup} if you want to see the files.}
 
-\item{plateperiod}{(\code{logical}) Argument of the local reconstuction submodule. Should the durations of the plates be forced on the partitioned feature? If these are set to \code{TRUE} and the plate duration estimates are long, then you might lose some data.}
+\item{plateperiod}{(\code{logical}) Deprecated argument, renamed to \code{validtime} for higher compatibility with the GPlates Web Service.}
 
 \item{partitioning}{(\code{character}) Argument of the local reconstruction submodule, which feature collection of the tectonic model should be used to assing plate IDs to the features? It defaults to \code{"static_polygons"}.}
 
 \item{check}{(\code{logical}) Should the validity of the entries for the GWS checked with the information stored in \code{\link{gws}}? (default: \code{TRUE})}
+
+\item{warn}{(\code{character}) Argument of the online reconstruction submodule, used in reverse-reconstructions (calculation of present-day coordinates from paleocoordinates). If set to `TRUE` (default), the function will produce a warning when paleocoordinates are not assigned to any of the paritioning polygons (missing values are returned for these). When set to `FALSE`, the warnings will not be displayed.}
+
+\item{anchor}{(\code{character}) Argument of the online reconstruction submodule. The Plate ID of the anchored plate. This is the 'anchored_plate_id' parameter of the GPlates Web Service.}
+
+\item{validtime}{(\code{logical}) Argument of the local reconstuction submodule. Should the durations of the plates be forced on the partitioned feature? If these are set to \code{TRUE} and the plate duration estimates are long, then you might lose some data. This is the inverse of the \code{ignore.valid.time} argument of the GWS.}
 
 \item{gmeta}{(\code{logical}) Argument of the local reconstruction submodule, in the case, when \code{sf} objects are supplied. Should the metadata produced by GPlates be included in the output object?}
 }
@@ -122,9 +136,10 @@ Each location will be assigned a plate id and moved back in time using the chose
 \details{
 The function implements two reconstruction submodules, which are selected with the \code{model} argument:
 
-If \code{model} is a \code{character} entry, then the \code{reconstruct()} function uses the GPlates Web Service (\url{https://gws.gplates.org/}, remote reconstruction submodule).
-The available reconstruction models for this submodule are (as of 2023-06-29):
+If \code{model} is a \code{character} entry, then the \code{reconstruct()} function uses the GPlates Web Service (\url{https://gwsdoc.gplates.org/}, remote reconstruction submodule).
+The available reconstruction models for this submodule are (as of 2024-02-02):
 \itemize{
+ \item "TorsvikCocks2017" (Torsvik and Cocks, 2017) for coastlines (0-540 Ma). Uses a mantle reference frame by default. For climatically sensitive analyses use a paleomagnetic reference frame, which you can toggle by setting the \code{anchor} parameter to \code{1} from the default \code{0}.
  \item "SETON2012" (Seton et al., 2012) for coastlines and topological plate polygons (0-200 Ma).
  \item "RODINIA2013" (Li et al., 2012) for coastlines (530-1100 Ma).
  \item "MULLER2016" (Muller et al., 2016) for coastlines and topological plate polygons (0-230 Ma).
@@ -156,6 +171,8 @@ Matthews, K. J., Maloney, K. T., Zahirovic, S., Williams, S. E., Seton, M., & M�
 \cr Scotese, C. R. (2016). PALEOMAP PaleoAtlas for GPlates and the PaleoData Plotter Program. http://www.earthbyte.org/paleomap‐ paleoatlas‐for‐gplates
 \cr
 \cr Seton, M., Müller, R. D., Zahirovic, S., Gaina, C., Torsvik, T., Shephard, G., … Chandler, M. (2012). Global continental and ocean basin reconstructions since 200Ma. Earth-Science Reviews, 113(3–4), 212–270. https://doi.org/10.1016/j.earscirev.2012.03.002
+\cr
+\cr Torsvik and Cocks (2017). Earth History and Palaeogeography. Cambridge University Press, 317 pp.
 \cr
 \cr Wright, N., Zahirovic, S., Müller, R. D., & Seton, M. (2013). Towards community-driven paleogeographic reconstructions: integrating open-access paleogeographic and paleobiology data with plate tectonics. Biogeosciences, 10(3), 1529–1541. https://doi.org/10.5194/bg-10-1529-2013
 }
