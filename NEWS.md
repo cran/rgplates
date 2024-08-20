@@ -1,8 +1,16 @@
 # Change log of the R package 'rgplates'
 
+# rgplates 0.4.1 - 2024-08-19
+
+### Added
+- The `checkgws()`, `getgws()` and `setgws()` functions that allow the customization of the remote location of the GPlates Web Service.
+
+### Changed
+- Docs updated to reflect repo transfer to https://github.com/gplates
+
 # rgplates 0.4.0 - 2024-02-02
 
-"Wondering Continents"
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10614722.svg)](https://doi.org/10.5281/zenodo.10614722) - "Wondering Continents"  
 
 ### Added
 - New suggested package 'httr2' to be used with the online method (see changed), which allows the customized usage of HTTP requests.
@@ -23,6 +31,8 @@
 
 ### Deleted
 - The 'chunk' argument of `reconstruct()` was deprecacted and is scheduled for omission.
+
+* * *
 
 # rgplates 0.3.2 - 2023-09-06
 
