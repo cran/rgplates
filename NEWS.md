@@ -1,12 +1,43 @@
 # Change log of the R package 'rgplates'
 
+# rgplates 0.5.0 - 2024-09-04
+
+### Added
+- Support for the reconstruction of `SpatRaster` class objects (package `terra`). The `terra` extension is now added as a suggested package.
+- The `velocities()` function to calculate plate tectonic velocities from the GWS. Currently only the online method is supported. The interface is similar to `reconstruct()`, the character-method e.g. `velocities("static_polygons")` returns velocities on a given feature set. 
+
+### Changed
+- Updated the `gws` object to version v1.1
+
+### Known issues
+- Velocities on topological plates are not yet available.
+
+### Missing
+- Vectorization for multiple ages in `velocities()`
+
+* * *
+
+# rgplates 0.4.2 - 2024-08-21
+
+*Interim release (not archived/published on the CRAN).*
+
+### Fixed
+
+- Bug with the offline method: GPlates 2.5.0 under Windows could not be reached because the default path resolved in the `gplates.exe.local` file.
+
+* * *
+
 # rgplates 0.4.1 - 2024-08-19
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13348606.svg)](https://doi.org/10.5281/zenodo.13348606) - "The Plates Be Driftin'"  
 
 ### Added
 - The `checkgws()`, `getgws()` and `setgws()` functions that allow the customization of the remote location of the GPlates Web Service.
 
 ### Changed
 - Docs updated to reflect repo transfer to https://github.com/gplates
+
+* * *
 
 # rgplates 0.4.0 - 2024-02-02
 

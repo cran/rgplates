@@ -1,5 +1,5 @@
 ###########################################################################
-# Front-end wrapper function
+# Front-end wrapper functions
 
 #' Reconstruct geographic features
 #' 
@@ -50,7 +50,7 @@
 #' 
 #' @param x The features to be reconstructed. Can be a vector with longitude and latitude representing
 #' a single point or a matrix/dataframe with the first column as longitude and second column as latitude.
-#' For the online subroutine, the character strings \code{"static_polygons"}, \code{"coastlines"}  and \code{"plate_polygons"} return static plate polygons, rotated present-day coastlines and topological plates, respectively. For the offline subroutine, it can be a name of the feature set defined in the \code{model} object. Some \code{Spatial*} and \code{sf} classes are also accepted, although this input is still experimental. 
+#' For the online subroutine, the character strings \code{"static_polygons"}, \code{"coastlines"}  and \code{"plate_polygons"} return static plate polygons, rotated present-day coastlines and topological plates, respectively. For the offline subroutine, it can be a name of the feature set defined in the \code{model} object. Some \code{Spatial*}, \code{sf} and \code{SpatRaster} classes are also accepted, although this input is still experimental.
 #' @param ... arguments passed to class-specific methods.
 #' @param age (\code{numeric}) is the target age in Ma at which the feature will be reconstructed. Defaults to 0 Ma. 
 #' @param model (\code{character} or \code{\link{platemodel}}) The  reconstruction model. The class of this argument selects the submodule used for reconstruction, a \code{character} value will invoke the remote reconstruction submodule and will submit \code{x} to the GPlates Web Service. A \code{platemodel} class object will call the local-reconstruction submodule. The default is \code{"PALEOMAP"}. See details for available models.
@@ -531,3 +531,195 @@ setMethod(
 )
 	
 
+
+#' @rdname reconstruct
+setMethod(
+	"reconstruct",
+	"SpatRaster",
+	function(x, age, model, from=0, listout=TRUE, verbose=FALSE, plateperiod=NULL, check=TRUE, validtime=TRUE){
+		if(!requireNamespace("terra", quietly=TRUE)) stop("This method requires the 'terra' package!")
+
+		if(!is.null(plateperiod)){
+			warning("This argument was renamed to 'validtime'. Use that instead, 'plateperiod' is deprecated.")
+			validtime <- plateperiod
+		}
+
+		if(is.null(model)){
+			message("No model was specified.")
+			x <- NULL
+			return(x)
+		}
+
+		# vectorized implementation
+		if(length(age)>1){
+			# list output
+			if(listout){
+				container <- list()
+			# SpArray
+			}else{
+				stop("This will return a RasterArray. Not yet!")
+			}
+
+			# iterate (recursive!)
+			for(i in 1:length(age)){
+				if(!is.character(model)){
+					stop("'SpatRaster' objects, are not yet supported by the offline method.\n  Please use the online method (GWS) instead.")
+				}else{
+					container[[i]] <- reconstruct(x, from=from, age=age[i],  model=model, validtime=validtime)
+				}
+			}
+
+			# list output
+			if(listout){
+				names(container) <- age
+			}
+
+		# single entry
+		}else{
+			if(!is.character(model)){
+				stop("'SpatRaster' objects, are not yet supported by the offline method.\n  Please use the online method (GWS) instead.")
+			}else{
+				if(check) CheckGWS("coastlines", model, age=age, verbose=verbose)
+				# extract the cells from the SpatRaster
+				xy <- terra::xyFromCell(x, 1:terra::ncell(x))
+
+				# reverse reconstruct with the matrix-method. It is easier to sample (extract) from an existing raster
+				# then to create a new raster from points - likely contiaining missing values
+				newPresent <- reconstruct(xy, from=age,age=from, model=model, warn=FALSE, validtime=validtime)
+
+				# now the magic: extract with the reverse reconstructed coordinates
+				vals <- terra::extract(x, newPresent, method="bilinear")
+
+				# if there are multiple layers
+				layers <- dim(x)[3]
+
+				# copy over the original
+				container <- x
+
+				# repeat for every
+				for(i in 1:layers){
+					# replace values
+					terra::values(container[[i]]) <- vals[[i]]
+				}
+			}
+
+		}
+		return(container)
+
+	}
+)
+
+#' Calculate velocities of plate tectonic movements
+#'
+#' Queries to return meshes of tectonic plate velocities.
+#'
+#' The function returns a mesh of velocities: two variables, either magnitude (mm/year) and azimuth (rad): \code{type="MagAzim"} or easting and northing velocity vectors (mm/year): \code{type="east_north"}.
+#' Currently only the online method is supported using the GPlates Web Service (internet connection is required).
+#' Available models are in the \code{\link{gws}} object, and can be provided with arguments similar to \code{\link{reconstruct}}.
+#'
+#' @param x \code{character}: What should the velocities be reconstructed for? If nothing is given (i.e. \code{signature(x="missing")} the argument defaults to the only currently working feature collection, the \code{"static_polygons"}\ - expected to be expanded in the future.
+#' @param age \code{numeric}: The age in millions of years at which the velocities are to be returned.
+#' @param model \code{character}: The name of the tectonic model. Similar to that of \code{\link{reconstruct}}.
+#' @param domain \code{character}: Either \code{"longLatGrid"} or \code{"healpix"}. \code{"longLatGrid"} returns the velocites with the domain of a regular, one-by-one degree longitude-latitude grid.
+#' \code{"healpix"} will return velocities with the domain of an icosahedral, nearly equidistant grid.
+#' @param type \code{character}: The type of velocity format that is to be returned, either magnitude and azimuth (\code{type="MagAzim"}) or easting and northing velocity vectors (\code{type="east_north"}).
+#' Both result in two variables.
+#' @param output \code{character}: The class name of the output to be returned. Either \code{data.frame} or \code{SpatRaster}. The latter requires the \code{terra} extension (suggested) and is only available with \code{domain="longLatGrid"}.
+#' @param polecrop \code{logical}: Only applicable if \code{output="SpatRaster"}. The original velocity values are provided as a grid-registered raster,
+#' which forces the extent of the raster to be beyond the regular \code{[-180, 180]} longitude and \code{[-90, 90]} domain, producing warnings when the \code{SpatRaster} is used.
+#' The default \code{cellraster=TRUE} resamples this raster to a native, cell-registered grid.
+#' This is an issue only with latitudes, so they get cropped by default. Setting this argument to \code{FALSE} will skip cropping.
+#' @param verbose \code{logical}: Are you interested in more messages?
+#' @param check (\code{logical}) Should the validity of the entries for the GWS checked with the information stored in \code{\link{gws}}? (default: \code{TRUE})
+#' @param ... Arguments of class-specific methods.
+#' @return Velocities of tectonic movements. If \code{output="data.frame"} then the function returns a \code{data.frame} with the longitude, latitude, the two velocity variables and the plate ids they belong to.
+#' If \code{output="SpatRaster"} then the output will be a multilayered \code{SpatRaster} object.
+#' @examples
+#' # dummy example,
+#' # set model to the desired model string, e.g. model="MERDITH2021"
+#' velocities("static_polygons", age=45, model=NULL)
+#' @rdname velocities
+#' @exportMethod velocities
+setGeneric("velocities", function(x,...) standardGeneric("velocities"))
+
+
+#' @rdname velocities
+setMethod(
+	"velocities",
+	signature(x="missing"),
+	function(x, ...){
+		# fall back to the static polygons
+		velocities(x="static_polygons", ...)
+	}
+
+)
+
+#' @rdname velocities
+setMethod(
+	"velocities",
+	signature(x="character"),
+	function(x, age, model, domain="longLatGrid", type="MagAzim", output="data.frame", polecrop=TRUE, verbose=FALSE, check=TRUE){
+
+		# basic argumentation check
+		veloDefend(type=type, domain=domain)
+
+		if(is.null(model)){
+			message("No model was specified.")
+			x <- NULL
+			return(x)
+		}
+
+		# if output is SpatRaster, then terra needs to be there
+		if(output=="SpatRaster"){
+			if(!requireNamespace("terra", quietly=TRUE)) stop("This method requires the 'terra' package!")
+			if(domain!="longLatGrid") stop("You need longitude-latitude domain to have 'SpatRaster' output!")
+		}
+
+		if(!is.numeric(age)) age <- as.numeric(age)
+
+		# recursive call
+		if(length(age)>1){
+			stop("Not yet!")
+#			if(!listout) stop("Only list output is available at this point.")
+
+		# base case: one Age
+		}else{
+			# online method
+			if(inherits(model,"character")){
+
+				if(check) if(x=="plate_polygons") stop("Velocities on the topological plates are not yet supported. ")
+				if(check) if(x!="static_polygons") stop("Only 'static_polygons' are supported at this point. ")
+
+				# extract the data
+				velo <- gwsVelocitiesThis(x, age=age, model=model, domain=domain, type=type, verbose=verbose, check=check)
+
+				if(output=="SpatRaster"){
+					# translate the standard output to a terra-raster
+					rasts <- SpatRastFromDF(velo, coords=c("long", "lat"), crs="WGS84")
+
+					# if the rasters are to be resampled - wrong extent
+					if(polecrop){
+						if(verbose) message("Cropping the grid to valid latitudes.\n  Use 'polecrop=FALSE' to skip")
+
+						# create the standard-extent raster
+						extent <- terra::ext(-180, 180, -89.5,89.5)
+						rasts <- terra::crop(rasts, extent)
+					}
+
+					# the returned object
+					velo <- rasts
+
+				}
+
+			# offline methods
+			}else{
+				stop("Velocity calculations are not yet supported by the offline method.\n  Please use the online method (GWS) instead.")
+			}
+
+
+		}
+
+		return(velo)
+
+	}
+)

@@ -213,7 +213,7 @@ CheckGWS <- function(x, model, age, verbose=TRUE){
 	# limit to model
 	gwsMod <- gws[which(gws$model==model), ]
 
-	if(nrow(gwsMod)==0) stop("The selected model is not a registered output of theof the GPlates Web Service.")
+	if(nrow(gwsMod)==0) stop("The selected model is not a registered output of the GPlates Web Service.")
 
 	# limit to feature
 	feat <- gwsMod[which(gwsMod$feature==x), ]
@@ -294,4 +294,38 @@ checkgws <- function(silent=FALSE){
 
 	# return success state 
 	invisible(version)
+}
+
+# Workhorse function to get the online reconstruction method's velocity data
+#
+# @param age The target age
+# @param model The model name string
+# @param domain The domain argument, structure of velocity field
+# @param type format of the velocities
+# @param check logical flag indicating whether the model should be checked to gws object
+# @return A data.frame containng the velocity information
+gwsVelocitiesThis <- function(x, age, model="MERDITH2021", domain="longLatGrid", type="MagAzim", verbose=FALSE, check=TRUE){
+
+	if(! requireNamespace("geojsonsf", quietly=TRUE)) stop("This method requires the 'geojsonsf' package to run.")
+
+	# check for the right combination
+	if(check) CheckGWS(x=x,model=model, age=age, verbose=verbose)
+
+	this <- paste0("velocity/",x)
+
+	#download and save data
+	url <- paste0(gwsURL, this, '/')
+	query <- sprintf('?time=%f&model=%s&velocity_type=%s&domain_type=%s', age, model, type, domain)
+
+	fullrequest <- sprintf(paste0(url,query))
+	if(verbose) cat("Getting data from:", fullrequest, "\n")
+
+	# read in the json-like Numpy Array
+	r <- readLines(fullrequest, warn=FALSE)
+
+	#read data
+	dat<- ParseVeloJSON(r, type=type)
+	
+	return(dat)
+
 }
