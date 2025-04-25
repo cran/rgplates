@@ -37,7 +37,11 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 		model@features <- model@features[, "feature_collection"]
 		names(model@features) <- nam
 	}	
-	
+
+	# if there are multiple rotation files, make sure to merge them first
+	if(length(model@rotation)>1) model@rotation <- mergeRotations(model@rotation)
+
+
     # 1. FIND GPlates
 		# A. get operating system
 		os <- getOS()
@@ -140,14 +144,27 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 		# folder where files will be executed
 		if(is.null(dir)) tempd <- tempdir() else tempd <- dir
 
-		# copy all model feature to working directory
+		# copy all model feature to working directory - unless it is a shapefile
 		sources <- plateFeatures
-		plateFeatures <-file.path(tempd, fileFromPath(sources, win=win)) 
-		# bug fix for windows
-		if (win) plateFeatures <- gsub("/","\\\\", plateFeatures)
 
+		for(i in 1:length(sources)){
+
+			# if it is not a shapefile, copy it over
+			if(!isShapefile(sources[i])){
+				# a single
+				plateFeature <-file.path(tempd, fileFromPath(sources[i], win=win))
+
+				# bug fix for windows
+				if (win) plateFeature <- gsub("/","\\\\", plateFeature)
+
+				# copy it over
+				results <- file.copy(sources[i], plateFeature)
+			}else{
+				plateFeature <- sources[i]
+			}
+			plateFeatures[i] <- plateFeature
+		}
 		names(plateFeatures) <- names(sources)
-		results <- file.copy(sources, plateFeatures)
 
 		# prepare x
 		# create a SpatialPointsDataFrame from long-lat matrix
@@ -169,6 +186,7 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 
 			# transform to sf
 			x <- sf::st_as_sf(x, coords=c("lng", "lat"))
+			
 		}
 		
 	
@@ -196,6 +214,9 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 		}
 
 
+		# default is to use this
+		gpmlExt <- "gpml"
+
 		# in case stat
 		if(!is.character(x)){
 		# write 'x' as a shapefile
@@ -208,7 +229,18 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 			sf::st_write(xTransform, dsn=paste(pathToFileNoEXT, ".shp", sep=""),
 				layer=layer, driver="ESRI Shapefile", quiet=!verbose)
 			# select partitioning feature
+			# test whether the partitioning feature collection is there
+			if(all(partitioning!=names(plateFeatures)))
+				stop(paste0("The partitioning feature collection '", partitioning, "'\n  is not part of the platemodel object."))
+			# if there: select the partitioning feature collection
 			platePolygons <- plateFeatures[partitioning]
+
+			# and then check if it a shapefile
+			if(isShapefile(platePolygons)){
+				# if it is, then it must be converted to a gpml
+				platePolygons <- shp_to_gpml(platePolygons,  dir=tempd,
+					gplatesExecutable=gplatesExecutable, winin=win, winout=win, verbose=verbose)
+			}
 
 
 		}else{
@@ -217,8 +249,22 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 			# look for x in the feature set
 			validFeature <- any(x==names(plateFeatures))
 			if(validFeature){
+
+				# if it a shapefile, then it needs to be converted to a gpml
+				if(isShapefile(plateFeatures[x])){
+					# convert here
+					plateFeatures[x] <- shp_to_gpml(plateFeatures[x],  dir=tempd,
+						gplatesExecutable=gplatesExecutable, winin=win, winout=win, verbose=verbose)
+				}
+
+				# which file version is used? .gmpl or .gpmlz?
+				withZ <- grepl(".gpmlz", plateFeatures[x])
+				if(withZ){
+					gpmlExt <- "gpmlz"
+				}
+
 				# use original one - even for windows.
-				pathToFileNoEXT <- gsub(".gpml", "",plateFeatures[x])
+				pathToFileNoEXT <- gsub(paste0(".", gpmlExt), "",plateFeatures[x])
 				if (win) pathToFileNoEXT <- gsub("/","\\\\", pathToFileNoEXT)
 			}else{
 				stop("The requested feature collection is not part of the model. ")
@@ -248,7 +294,7 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 		# do reconstruction
 		if(!is.character(x)) if(verbose) message("Reconstructing coordinates.")
 		if(is.character(x)) if(validFeature) if(verbose) message(paste0("Reconstructing '",  x, "'."))
-			reconstruction <- paste(gplatesExecutable, " reconstruct -l \"",pathToFileNoEXT,".gpml\" -r \"", 
+			reconstruction <- paste(gplatesExecutable, " reconstruct -l \"",pathToFileNoEXT,".",gpmlExt,"\" -r \"",
 					rotation, "\" -e shapefile -t ", age, " -o \"", pathToFileNoEXT,"_reconstructed\" -w 1", sep="") 
 			system(reconstruction, ignore.stdout=!verbose,ignore.stderr=!verbose)
 
@@ -262,6 +308,9 @@ reconstructGPlates <- function(x, age, model, path.gplates=NULL,dir=NULL, verbos
 		# the single file
 		targetSingle <- paste(pathToFileNoEXT,"_reconstructed.shx",	sep="")
 		targetSingleNoPath <- fileFromPath(targetSingle, win=win)
+
+		if(verbose) message(paste0("Reading in: ", targetSingle))
+
 
 		# produced directory? 
 		targetDir<- paste(pathToFileNoEXT,"_reconstructed",	sep="")
@@ -481,4 +530,94 @@ testGPlates<- function(gplatesExecutable, verbose){
 	
 	# if gplates is not present
 	return(!is.null(ver))
+}
+
+
+# if the model is made up of multiple rotation files, they need to be merged
+# will create a new, temporary rotation file in the temp directory
+mergeRotations <- function(x){
+
+	# store everything in here
+	allLines <- NULL
+	for(i in 1:length(x)){
+		allLines <- c(allLines, readLines(x[i]))
+	}
+
+	# write them into the temporary directory
+	tempor <- tempdir()
+
+	# where to write the file
+	newFile <- file.path(tempor, "jointRotation.rot")
+
+	# write it
+	cat(allLines, file=newFile, sep="\n")
+
+	# return the name of the new rotation file
+	return(newFile)
+
+}
+
+
+isShapefile <- function(x){
+	# get filename
+	filename <- fileFromPath(x)
+	grepl("\\.shx$",filename) | grepl("\\.shp$",filename)
+}
+
+shp_to_gpml <- function(x, dir=file.path(tempdir(), "newgpml"), gplatesExecutable, winin=FALSE, winout=FALSE, verbose=FALSE){
+	if(verbose){
+		message("Transforming shapefile to gpml:")
+		message(x)
+	}
+
+	# first ensure that the directory exists
+	dir.create(dir, showWarnings=FALSE)
+
+	if(winin) x <- gsub("\\\\", "/", x)
+
+	# copy over all relevant files
+	filename <- fileFromPath(x)
+
+	# the filename stem
+	fileStem <- unlist(lapply(strsplit(filename, "\\."), function(x) paste(x[-length(x)], collapse="")))
+
+	# origdir
+	origdir <- unlist(lapply(strsplit(x, "/"), function(x) paste(x[-length(x)], collapse="/")))
+
+	# list out all the files (shapefiles should have the same stem
+	allFiles <- list.files(origdir)
+
+
+	# copy the relevant files
+	toCopy <- allFiles[grep(fileStem, allFiles)]
+
+
+	for(i in 1:length(toCopy)){
+		file.copy(file.path(origdir,toCopy[i]),file.path(dir, toCopy[i]))
+	}
+
+	# look for the shapefile (shp)
+	shpFile <- toCopy[grep("\\.shp$",toCopy)]
+	pathToFile <- file.path(dir, shpFile)
+
+	# now check the OS
+	if (winout) pathToFile <- gsub("/","\\\\", pathToFile)
+
+	# then use gplates
+	conversion <- paste(gplatesExecutable, " convert-file-format -l \"",pathToFile,"\" -e gpml",sep="")
+
+	# execute conversion
+	system(conversion, ignore.stdout=!verbose,ignore.stderr=!verbose)
+
+	# return path to gpml file
+	result <- paste0(dir, "/", fileStem, ".gpml")
+
+	# ensure homogeneous path output
+	if(winout){
+		result <- gsub("/","\\\\", result)
+	}else{
+		result <- gsub("\\\\","/", result)
+	}
+
+	return(result)
 }
